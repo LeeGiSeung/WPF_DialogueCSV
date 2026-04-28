@@ -1,0 +1,3 @@
+﻿ID,ID,Speaker,FirstText,SecondText,UIType,NextID,DirectingKey
+ID_NORMAL_0,ID_NORMAL_0,None,a,a,Normal,ID_NORMAL_1,None
+ID_NORMAL_1,ID_NORMAL_1,None,a,a,End,ID_END_2,None

@@ -1,0 +1,17 @@
+﻿<Window x:Class="WPF_DialogueCSV.ch6"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      xmlns:local="clr-namespace:WPF_DialogueCSV"
+      mc:Ignorable="d" 
+      d:DesignHeight="450" d:DesignWidth="800"
+      Title="ch6">
+
+    <StackPanel VerticalAlignment="Center">
+        <Button Background="Green" Content="버튼 1" ToolTip="정보 표시" Width="100"
+                Name="btn_1" Click="btn_1_Click"/>
+        <Button Background="Blue" Content="버튼 2 " Name="aaaaa" Click="aaaaa_Click"/>
+        <Button Background="Red" Content="버튼 3" KeyDown="Button_KeyDown"/>
+    </StackPanel>
+</Window>
