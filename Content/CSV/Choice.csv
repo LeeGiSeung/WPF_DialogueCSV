@@ -1,1 +1,2 @@
-ID,ID,FirstText,SecondText,ChoiceText1,ChoiceText2,ChoiceText3,ChoiceText4,ChoiceTextAnswer1,ChoiceTextAnswer2,ChoiceTextAnswer3,ChoiceTextAnswer4,UIType,Speaker,DirectingKey
+﻿ID,ID,FirstText,SecondText,ChoiceText1,ChoiceText2,ChoiceText3,ChoiceText4,ChoiceTextAnswer1,ChoiceTextAnswer2,ChoiceTextAnswer3,ChoiceTextAnswer4,UIType,Speaker,DirectingKey
+ID_CHOICE_0,ID_CHOICE_0,A,A,CH1,CH2,CH3,CH4,ID_NORMAL_1,ID_NORMAL_2,ID_NORMAL_3,ID_NORMAL_4,Normal,가도된다고,None

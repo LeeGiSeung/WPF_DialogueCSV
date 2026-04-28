@@ -1,5 +1,7 @@
 ﻿using System;
-using System.IO;        // 파일 및 경로 처리를 위해 필수
+using System.Collections.Generic;
+using System.Data;
+using System.IO;
 using System.Linq;
 using System.Media;
 using System.Text;
@@ -10,267 +12,256 @@ namespace WPF_DialogueCSV
 {
     public partial class DialogueEditor : Window
     {
-        public enum EDialogueUIType { Normal, Choice, Auto, Cinematic, End }
-        public enum EDialogueEventType { Normal, CameraSlowAroundMove }
-
-        // 오디오 파일이 들어있는 실제 폴더 경로 (본인의 경로에 맞게 수정하세요)
-        private string soundFolderPath = @"C:\Users\82103\source\repos\WPF\DialogueCSV\WPF_DialogueCSV\Content\Sounds";
-        private readonly string csvFolderPath = @"C:\Users\82103\source\repos\WPF\DialogueCSV\WPF_DialogueCSV\Content\CSV";
-
-        private Dictionary<string, List<string[]>> _csvContents = new Dictionary<string, List<string[]>>();
-        private void LoadAllCsvFiles()
-        {
-            string[] fileTypes = { "Auto", "Normal", "Choice", "Cinematic" };
-            foreach (var type in fileTypes)
-            {
-                string filePath = Path.Combine(csvFolderPath, $"{type}.csv");
-                _csvContents[type] = new List<string[]>();
-
-                if (File.Exists(filePath))
-                {
-                    var lines = File.ReadAllLines(filePath, Encoding.UTF8);
-                    foreach (var line in lines)
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-                        // 쉼표로 분리 (실제 CSV는 따옴표 처리가 필요할 수 있으나 기본 분리 적용)
-                        _csvContents[type].Add(line.Split(','));
-                    }
-                }
-            }
-        }
+        private string csvPath = @"C:\Users\82103\source\repos\WPF\DialogueCSV\WPF_DialogueCSV\Content\CSV";
+        private string soundPath = @"C:\Users\82103\source\repos\WPF\DialogueCSV\WPF_DialogueCSV\Content\Sounds";
 
         public DialogueEditor()
         {
-            InitializeComponent(); // 한 번만 호출해야 합니다.
-
-            LoadAllCsvFiles();
-
-            // 1. Enum 데이터 연결
-            ComboUIType.ItemsSource = Enum.GetValues(typeof(EDialogueUIType));
-            ComboEventType.ItemsSource = Enum.GetValues(typeof(EDialogueEventType));
-
-            // 2. 오디오 파일 목록 불러오기
-            RefreshSpeakerList();
-
-            // 기본값 설정
-            ComboUIType.SelectedIndex = 0;
-            ComboEventType.SelectedIndex = 0;
+            InitializeComponent();
+            LoadSoundList();
         }
 
-        // 특정 폴더에서 파일 목록을 가져와 ComboBox에 채우는 함수
-        private void RefreshSpeakerList()
+        // 1. 사운드 목록 로드 (Speaker 콤보박스용)
+        private void LoadSoundList()
         {
-            if (Directory.Exists(soundFolderPath))
+            try
             {
-                // .wav 파일들만 찾아서 리스트업
-                var files = Directory.GetFiles(soundFolderPath, "*.wav")
-                                     .Select(f => Path.GetFileNameWithoutExtension(f))
-                                     .ToList();
-                ComboSpeaker.ItemsSource = files;
+                if (Directory.Exists(soundPath))
+                {
+                    var files = Directory.GetFiles(soundPath)
+                        .Select(Path.GetFileNameWithoutExtension)
+                        .ToList();
+                    files.Insert(0, "None");
+                    ComboSpeaker.ItemsSource = files;
+                    ComboSpeaker.SelectedIndex = 0;
+                }
+            }
+            catch (Exception ex) { MessageBox.Show("사운드 로드 실패: " + ex.Message); }
+        }
+
+        // 2. CSV 로드 (Alter 영역)
+        private void LoadCsvData()
+        {
+            if (csvList.SelectedItem is ComboBoxItem item)
+            {
+                string fileName = item.Content.ToString();
+
+                if (fileName == "Choice")
+                {
+                    ChoiceSection.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    ChoiceSection.Visibility = Visibility.Collapsed;
+                }
+
+
+                    string fullPath = Path.Combine(csvPath, $"{fileName}.csv");
+                if (!File.Exists(fullPath)) return;
+
+                DataTable dt = new DataTable();
+                string[] lines = File.ReadAllLines(fullPath, Encoding.UTF8);
+
+                if (lines.Length > 0)
+                {
+                    string[] headers = lines[0].Split(',');
+                    // DataTable은 중복 컬럼명을 허용하지 않으므로 처리 (ID, ID 대응)
+                    for (int i = 0; i < headers.Length; i++)
+                    {
+                        string hName = headers[i].Trim();
+                        if (dt.Columns.Contains(hName)) dt.Columns.Add($"{hName}_{i}");
+                        else dt.Columns.Add(hName);
+                    }
+
+                    for (int i = 1; i < lines.Length; i++)
+                    {
+                        if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                        string[] data = lines[i].Split(',');
+                        // 열 개수 맞춤
+                        string[] safeData = new string[dt.Columns.Count];
+                        for (int j = 0; j < dt.Columns.Count; j++)
+                            safeData[j] = j < data.Length ? data[j].Trim() : "None";
+                        dt.Rows.Add(safeData);
+                    }
+                }
+                dgDisplay.ItemsSource = dt.DefaultView;
+            }
+        }
+
+        // 3. 표에서 행 선택 시 에디터로 복사
+        private void dgDisplay_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (dgDisplay.SelectedItem is DataRowView row)
+            {
+                string currentFile = (csvList.SelectedItem as ComboBoxItem).Content.ToString();
+
+                // 공통: ID (숫자만 추출)
+                TxtID.Text = row[0].ToString().Split('_').Last();
+                TxtFirst.Text = row["FirstText"].ToString();
+                TxtSecond.Text = row["SecondText"].ToString();
+                TxtDirectingKey.Text = row["DirectingKey"].ToString();
+                ComboUIType.Text = row["UIType"].ToString();
+
+                if (currentFile == "Choice")
+                {
+                    // Choice 전용 필드 복사
+                    TxtChoice1.Text = row["ChoiceText1"].ToString();
+                    TxtChoice2.Text = row["ChoiceText2"].ToString();
+                    TxtChoice3.Text = row["ChoiceText3"].ToString();
+                    TxtChoice4.Text = row["ChoiceText4"].ToString();
+
+                    // Answer ID 숫자만 추출
+                    TxtAnswer1.Text = row["ChoiceTextAnswer1"].ToString().Split('_').Last();
+                    TxtAnswer2.Text = row["ChoiceTextAnswer2"].ToString().Split('_').Last();
+                    TxtAnswer3.Text = row["ChoiceTextAnswer3"].ToString().Split('_').Last();
+                    TxtAnswer4.Text = row["ChoiceTextAnswer4"].ToString().Split('_').Last();
+
+                    ComboSpeaker.Text = row["Speaker"].ToString();
+                }
+                else
+                {
+                    ComboSpeaker.Text = row["Speaker"].ToString();
+                    string nId = row["NextID"].ToString();
+                    TxtNextID.Text = nId.Contains("_") ? nId.Split('_').Last() : nId;
+                }
+            }
+        }
+
+        // 4. 저장 버튼
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+            string targetFile = (csvList.SelectedItem as ComboBoxItem)?.Content.ToString();
+            string nextType = (ComboUIType.SelectedItem as ComboBoxItem)?.Content.ToString();
+            if (targetFile == null || nextType == null) return;
+
+            string myID = $"ID_{targetFile.ToUpper()}_{TxtID.Text.Trim()}";
+            string speaker = string.IsNullOrEmpty(ComboSpeaker.Text) ? "None" : ComboSpeaker.Text;
+            string dKey = string.IsNullOrEmpty(TxtDirectingKey.Text) ? "None" : TxtDirectingKey.Text;
+
+            List<string> rowData = new List<string>();
+
+            if (targetFile == "Choice")
+            {
+                // Choice 구조 (15개 컬럼)
+                rowData.Add(myID); // RowName
+                rowData.Add(myID); // ID
+                rowData.Add(TxtFirst.Text);
+                rowData.Add(TxtSecond.Text);
+                rowData.Add(string.IsNullOrEmpty(TxtChoice1.Text) ? "None" : TxtChoice1.Text);
+                rowData.Add(string.IsNullOrEmpty(TxtChoice2.Text) ? "None" : TxtChoice2.Text);
+                rowData.Add(string.IsNullOrEmpty(TxtChoice3.Text) ? "None" : TxtChoice3.Text);
+                rowData.Add(string.IsNullOrEmpty(TxtChoice4.Text) ? "None" : TxtChoice4.Text);
+
+                // Answer ID 자동 포맷팅 (숫자 입력 시 ID_CHOICE_숫자)
+                rowData.Add(FormatChoiceID(TxtAnswer1.Text, nextType));
+                rowData.Add(FormatChoiceID(TxtAnswer2.Text, nextType));
+                rowData.Add(FormatChoiceID(TxtAnswer3.Text, nextType));
+                rowData.Add(FormatChoiceID(TxtAnswer4.Text, nextType));
+
+                rowData.Add(nextType);
+                rowData.Add(speaker);
+                rowData.Add(dKey);
             }
             else
             {
-                MessageBox.Show("오디오 폴더 경로가 잘못돼있습니다.");
+                // Normal/Auto/Cinematic 구조 (8개 컬럼)
+                string nextID = (nextType == "End") ? "None" : $"ID_{nextType.ToUpper()}_{TxtNextID.Text.Trim()}";
+                rowData.AddRange(new[] { myID, myID, speaker, TxtFirst.Text, TxtSecond.Text, nextType, nextID, dKey });
             }
+
+            // 쉼표 제거 처리 후 합치기
+            string finalLine = string.Join(",", rowData.Select(s => s.Replace(",", " ").Trim()));
+            string fullPath = Path.Combine(csvPath, $"{targetFile}.csv");
+
+            try
+            {
+                var lines = File.ReadAllLines(fullPath, Encoding.UTF8).ToList();
+                int idx = lines.FindIndex(l => l.StartsWith(myID + ","));
+                if (idx >= 0) lines[idx] = finalLine;
+                else lines.Add(finalLine);
+
+                File.WriteAllLines(fullPath, lines, Encoding.UTF8);
+                LoadCsvData();
+                MessageBox.Show("저장 완료!");
+            }
+            catch (Exception ex) { MessageBox.Show("저장 실패: " + ex.Message); }
         }
+
+        private string FormatChoiceID(string input, string prefix)
+        {
+            if (string.IsNullOrWhiteSpace(input) || input.ToLower() == "none") return "None";
+
+            // 숫자인 경우에만 ID_타입_숫자 형식으로 만들고, 아니면 그대로 반환
+            return int.TryParse(input, out _) ? $"ID_{prefix.ToUpper()}_{input.Trim()}" : input.Trim();
+        }
+
+        //private string FormatChoiceID(string input)
+        //{
+        //    if (string.IsNullOrWhiteSpace(input) || input.ToLower() == "none") return "None";
+        //    return int.TryParse(input, out _) ? $"ID_CHOICE_{input.Trim()}" : input.Trim();
+        //}
+
+        private void csvList_SelectionChanged(object sender, SelectionChangedEventArgs e) => LoadCsvData();
+        private void btnRefresh_Click(object sender, RoutedEventArgs e) => LoadCsvData();
 
         private void ComboUIType_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (ComboUIType.SelectedItem == null) return;
-            var selected = (EDialogueUIType)ComboUIType.SelectedItem;
+            if (ChoiceSection == null) return;
+            string type = (ComboUIType.SelectedItem as ComboBoxItem)?.Content.ToString();
+            // Next UI Type이 Choice거나, 현재 편집 중인 파일 자체가 Choice인 경우 보이기
+            string currentFile = (csvList.SelectedItem as ComboBoxItem)?.Content.ToString();
 
-            if (ChoiceSection != null)
-            {
-                ChoiceSection.Visibility = (selected == EDialogueUIType.Choice)
-                           ? Visibility.Visible : Visibility.Collapsed;
-            }
-        }
-
-        // 스피커를 선택했을 때 또는 재생 버튼을 눌렀을 때 소리 재생
-        private void btnPlaySound_Click(object sender, RoutedEventArgs e)
-        {
-            if (ComboSpeaker.SelectedItem == null) return;
-
-            string selectedSpeaker = ComboSpeaker.SelectedItem.ToString();
-
-            if (string.IsNullOrEmpty(selectedSpeaker))
-            {
-                // 선택된 게 없으면 재생하지 않고 함수 종료
-                return;
-            }
-            string filePath = Path.Combine(soundFolderPath, selectedSpeaker + ".wav");
-
-            if (File.Exists(filePath))
-            {
-                try
-                {
-                    SoundPlayer player = new SoundPlayer(filePath);
-                    player.Play();
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show("재생 중 오류 발생: " + ex.Message);
-                }
-            }
+            if (type == "Choice" || currentFile == "Choice")
+                ChoiceSection.Visibility = Visibility.Visible;
             else
-            {
-                MessageBox.Show("해당하는 음성 파일이 없습니다.");
-            }
+                ChoiceSection.Visibility = Visibility.Collapsed;
         }
 
         private void bntClear_Click(object sender, RoutedEventArgs e)
         {
-            ClearChoiceInput();
+            TxtID.Clear(); TxtFirst.Clear(); TxtSecond.Clear(); TxtNextID.Clear(); TxtDirectingKey.Clear();
+            TxtChoice1.Clear(); TxtChoice2.Clear(); TxtChoice3.Clear(); TxtChoice4.Clear();
+            TxtAnswer1.Clear(); TxtAnswer2.Clear(); TxtAnswer3.Clear(); TxtAnswer4.Clear();
         }
 
-        private void ClearChoiceInput()
+        private void btnPlaySound_Click(object sender, RoutedEventArgs e)
         {
-            TxtID.Clear();
-            TxtFirst.Clear();
-            TxtSecond.Clear();
-            TxtDirectingKey.Clear();
-            TxtNextID.Clear();
+            // 1. 현재 선택된 텍스트 가져오기
+            string selectedSpeaker = ComboSpeaker.Text.Trim();
 
-            ComboSpeaker.SelectedIndex = -1;
-
-            TxtChoice1.Clear(); TxtAnswer1.Clear();
-            TxtChoice2.Clear(); TxtAnswer2.Clear();
-            TxtChoice3.Clear(); TxtAnswer3.Clear();
-            TxtChoice4.Clear(); TxtAnswer4.Clear();
-        }
-
-        private void TxtFileName_TextChanged(object sender, TextChangedEventArgs e)
-        {
-
-        }
-
-        private void Button_Click(object sender, RoutedEventArgs e)
-        {
-            // 1. 저장할 파일 및 현재 ID 규칙 (csvList 기준)
-            string selectedFile = (csvList.SelectedItem is ComboBoxItem cItem) ? cItem.Content.ToString() : csvList.Text;
-
-            // 2. 데이터 내부에 기록될 UI Type (ComboUIType 기준)
-            string dataUIType = (ComboUIType.SelectedItem is ComboBoxItem uItem) ? uItem.Content.ToString() : ComboUIType.Text;
-
-            if (string.IsNullOrEmpty(selectedFile) || string.IsNullOrEmpty(dataUIType))
+            if (string.IsNullOrEmpty(selectedSpeaker) || selectedSpeaker.ToLower() == "none")
             {
-                MessageBox.Show("파일 리스트와 Next UI Type을 모두 선택해주세요.");
+                MessageBox.Show("재생할 사운드가 선택되지 않았습니다.");
                 return;
             }
 
-            // 3. ID 포매팅 (현재 저장되는 파일 타입 기준)
-            string rawId = TxtID.Text.Trim();
-            string formattedID = $"ID_{selectedFile.ToUpper()}_{rawId}";
+            // 2. 경로 조합 (soundPath는 이미 정의된 변수 사용)
+            // 확장자가 포함되어 있지 않다면 .wav를 붙여줍니다.
+            string fullSoundPath = Path.Combine(soundPath, selectedSpeaker);
 
-            // 4. Next ID 포매팅 (ComboUIType 기준)
-            // TxtNextID에 숫자만 쓰면 "ID_선택한NextUIType_숫자" 로 저장
-            string rawNextId = TxtNextID.Text.Trim();
-            string formattedNextID = "None";
-            if (!string.IsNullOrEmpty(rawNextId) && rawNextId.ToLower() != "none")
+            if (!fullSoundPath.EndsWith(".wav"))
             {
-                formattedNextID = int.TryParse(rawNextId, out _)
-                    ? $"ID_{dataUIType.ToUpper()}_{rawNextId}"
-                    : rawNextId;
+                fullSoundPath += ".wav";
             }
 
-            // 5. 공통 데이터 정리
-            string speakerID = string.IsNullOrEmpty(ComboSpeaker.Text) ? "None" : ComboSpeaker.Text;
-            string directingKey = string.IsNullOrEmpty(TxtDirectingKey.Text) ? "None" : TxtDirectingKey.Text;
-            string firstText = TxtFirst.Text.Replace("\r\n", " ").Replace(",", " ");
-            string secondText = TxtSecond.Text.Replace("\r\n", " ").Replace(",", " ");
-
-            // 6. 열(Column) 구성 분기 (저장될 파일의 형식을 따름)
-            List<string> rowData = new List<string>();
-
-            if (selectedFile == "Choice")
+            // 3. 파일 존재 여부 확인 후 재생
+            if (File.Exists(fullSoundPath))
             {
-                // Choice 파일 형식
-                rowData.Add(formattedID); rowData.Add(formattedID);
-                rowData.Add(firstText); rowData.Add(secondText);
-                rowData.Add(string.IsNullOrEmpty(TxtChoice1.Text) ? "None" : TxtChoice1.Text.Replace(",", " "));
-                rowData.Add(string.IsNullOrEmpty(TxtChoice2.Text) ? "None" : TxtChoice2.Text.Replace(",", " "));
-                rowData.Add(string.IsNullOrEmpty(TxtChoice3.Text) ? "None" : TxtChoice3.Text.Replace(",", " "));
-                rowData.Add(string.IsNullOrEmpty(TxtChoice4.Text) ? "None" : TxtChoice4.Text.Replace(",", " "));
-                rowData.Add(string.IsNullOrEmpty(TxtAnswer1.Text) ? "None" : TxtAnswer1.Text.Replace(",", " "));
-                rowData.Add(string.IsNullOrEmpty(TxtAnswer2.Text) ? "None" : TxtAnswer2.Text.Replace(",", " "));
-                rowData.Add(string.IsNullOrEmpty(TxtAnswer3.Text) ? "None" : TxtAnswer3.Text.Replace(",", " "));
-                rowData.Add(string.IsNullOrEmpty(TxtAnswer4.Text) ? "None" : TxtAnswer4.Text.Replace(",", " "));
-                rowData.Add(dataUIType); // 데이터 내 UI Type
-                rowData.Add(speakerID);
-                rowData.Add(directingKey);
+                try
+                {
+                    SoundPlayer player = new SoundPlayer(fullSoundPath);
+                    player.Play(); // 비동기 재생 (UI 안 멈춤)
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("재생 오류: " + ex.Message);
+                }
             }
             else
             {
-                // Normal, Auto, Cinematic 파일 형식
-                rowData.Add(formattedID);
-                rowData.Add(formattedID);
-                rowData.Add(speakerID);
-                rowData.Add(firstText);
-                rowData.Add(secondText);
-                rowData.Add(dataUIType); // 데이터 내 UI Type
-                rowData.Add(formattedNextID); // 포매팅된 Next ID
-                rowData.Add(directingKey);
-            }
-
-            string finalCsvLine = string.Join(",", rowData);
-
-            try
-            {
-                string csvFolderPath = @"C:\Users\82103\source\repos\WPF\DialogueCSV\WPF_DialogueCSV\Content\CSV";
-                string fullPath = Path.Combine(csvFolderPath, $"{selectedFile}.csv");
-
-                if (!File.Exists(fullPath))
-                {
-                    MessageBox.Show($"{selectedFile}.csv 파일이 없습니다.");
-                    return;
-                }
-
-                List<string> allLines = File.ReadAllLines(fullPath, Encoding.UTF8).ToList();
-                int existingIndex = allLines.FindIndex(line => line.StartsWith(formattedID + ","));
-
-                if (existingIndex >= 0)
-                {
-                    allLines[existingIndex] = finalCsvLine;
-                    File.WriteAllLines(fullPath, allLines, Encoding.UTF8);
-                    MessageBox.Show($"{selectedFile} 파일 수정 완료: {formattedID}");
-                }
-                else
-                {
-                    allLines.Add(finalCsvLine);
-                    File.WriteAllLines(fullPath, allLines, Encoding.UTF8);
-                    MessageBox.Show($"{selectedFile} 파일 추가 완료: {formattedID}");
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"오류 발생: {ex.Message}");
+                MessageBox.Show($"파일을 찾을 수 없습니다:\n{fullSoundPath}");
             }
         }
 
-        private void AutoIncrementID()
-        {
-            if (int.TryParse(TxtID.Text, out int currentID))
-            {
-                TxtID.Text = (currentID + 1).ToString();
-            }
-        }
-
-        private string EscapeCsv(string data)
-        {
-            if (string.IsNullOrEmpty(data)) return "";
-            // 데이터에 쉼표나 큰따옴표가 있으면 큰따옴표로 감싸줌
-            if (data.Contains(",") || data.Contains("\""))
-            {
-                return $"\"{data.Replace("\"", "\"\"")}\"";
-            }
-            return data;
-        }
-
-        private void TxtID_TextChanged(object sender, TextChangedEventArgs e)
-        {
-
-        }
     }
-
-
 }
